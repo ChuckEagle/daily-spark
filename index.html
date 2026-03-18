@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Spark</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1.5rem;
+      transition: background 0.8s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .circle { position: absolute; border-radius: 50%; pointer-events: none; }
+    .circle-top { top: -80px; right: -80px; width: 320px; height: 320px; }
+    .circle-bottom { bottom: -120px; left: -60px; width: 260px; height: 260px; }
+    .date-chip { margin-bottom: 2.5rem; opacity: 0; transform: translateY(-12px); transition: all 0.6s ease; }
+    .date-chip span { font-size: 12px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; border-radius: 999px; padding: 6px 16px; }
+    .card { max-width: 620px; width: 100%; text-align: center; opacity: 0; transform: translateY(20px); transition: all 0.8s ease 0.15s; }
+    .revealed { opacity: 1 !important; transform: translateY(0) !important; }
+    .theme-pill { display: inline-block; font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 14px; border-radius: 999px; margin-bottom: 2rem; }
+    blockquote { margin: 0 0 1.5rem; font-size: clamp(1.3rem, 3.5vw, 2rem); font-weight: 300; line-height: 1.5; font-style: italic; letter-spacing: -0.01em; }
+    .author { font-size: 14px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 2.5rem; }
+    .divider { width: 40px; height: 1px; margin: 0 auto 2rem; }
+    .connection { font-size: 14px; line-height: 1.7; max-width: 440px; margin: 0 auto 2.5rem; }
+    .share-btn { background: transparent; padding: 10px 24px; border-radius: 999px; font-size: 13px; cursor: pointer; letter-spacing: 0.06em; transition: all 0.2s ease; }
+    .share-btn:hover { opacity: 0.85; }
+    .loader-text { font-size: 13px; letter-spacing: 0.08em; margin-bottom: 1rem; }
+    .loader-bar { width: 40px; height: 2px; border-radius: 2px; margin: 0 auto; animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 0.3; width: 40px; } 50% { opacity: 1; width: 80px; } }
+    .footer { position: fixed; bottom: 1.5rem; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0; transition: opacity 1s ease 0.5s; }
+    .footer.revealed { opacity: 0.5 !important; }
+  </style>
+</head>
+<body>
+  <div class="circle circle-top" id="circleTop"></div>
+  <div class="circle circle-bottom" id="circleBottom"></div>
+  <div class="date-chip" id="dateChip"><span id="dateLabel"></span></div>
+  <div class="card" id="card">
+    <div id="loader">
+      <div class="loader-text" id="loaderText">Finding today's spark...</div>
+      <div class="loader-bar" id="loaderBar"></div>
+    </div>
+    <div id="quoteContent" style="display:none">
+      <div class="theme-pill" id="themePill"></div>
+      <blockquote id="quoteText"></blockquote>
+      <div class="author" id="authorText"></div>
+      <div class="divider" id="divider"></div>
+      <p class="connection" id="connectionText"></p>
+      <button class="share-btn" id="shareBtn" onclick="copyQuote()">Share quote</button>
+    </div>
+    <div id="errorMsg" style="display:none; font-size:15px;"></div>
+  </div>
+  <div class="footer" id="footer">Daily Spark — a new quote every day</div>
+
+  <script>
+    const COLORS = [
+      { bg: "#1a1a2e", accent: "#e94560", muted: "#a0a0b0" },
+      { bg: "#0f3460", accent: "#e94560", muted: "#8090b0" },
+      { bg: "#16213e", accent: "#f5a623", muted: "#9090a8" },
+      { bg: "#1b4332", accent: "#74c69d", muted: "#90b0a0" },
+      { bg: "#240046", accent: "#ff6b9d", muted: "#a090b8" },
+      { bg: "#03045e", accent: "#48cae4", muted: "#8090b8" },
+      { bg: "#370617", accent: "#faa307", muted: "#a08878" },
+    ];
+
+    const today = new Date();
+    const color = COLORS[today.getDay()];
+    const dateStr = today.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    const storageKey = "dq_" + today.toISOString().slice(0, 10);
+
+    document.body.style.background = color.bg;
+    document.getElementById("circleTop").style.border = `1px solid ${color.accent}22`;
+    document.getElementById("circleBottom").style.border = `1px solid ${color.accent}18`;
+    document.getElementById("dateLabel").style.cssText = `color:${color.accent}; border:1px solid ${color.accent}55;`;
+    document.getElementById("dateLabel").textContent = dateStr;
+    document.getElementById("loaderText").style.color = color.muted;
+    document.getElementById("loaderBar").style.background = color.accent;
+    document.getElementById("footer").style.color = color.muted;
+
+    function reveal() {
+      document.getElementById("dateChip").classList.add("revealed");
+      document.getElementById("card").classList.add("revealed");
+      document.getElementById("footer").classList.add("revealed");
+    }
+
+    function showQuote(q) {
+      document.getElementById("loader").style.display = "none";
+      const pill = document.getElementById("themePill");
+      pill.textContent = q.theme;
+      pill.style.cssText = `background:${color.accent}; color:${color.bg};`;
+      const qt = document.getElementById("quoteText");
+      qt.textContent = `\u201c${q.quote}\u201d`;
+      qt.style.color = "#eaeaea";
+      const au = document.getElementById("authorText");
+      au.textContent = `\u2014 ${q.author}`;
+      au.style.color = color.accent;
+      document.getElementById("divider").style.background = `${color.accent}60`;
+      const cn = document.getElementById("connectionText");
+      cn.textContent = q.connection;
+      cn.style.color = color.muted;
+      const btn = document.getElementById("shareBtn");
+      btn.style.cssText = `border:1px solid ${color.accent}55; color:${color.muted};`;
+      document.getElementById("quoteContent").style.display = "block";
+    }
+
+    function showError(msg) {
+      document.getElementById("loader").style.display = "none";
+      const err = document.getElementById("errorMsg");
+      err.textContent = msg;
+      err.style.color = color.muted;
+      err.style.display = "block";
+    }
+
+    let currentQuote = null;
+
+    function copyQuote() {
+      if (!currentQuote) return;
+      navigator.clipboard.writeText(`\u201c${currentQuote.quote}\u201d \u2014 ${currentQuote.author}\n\n${currentQuote.connection}`);
+      const btn = document.getElementById("shareBtn");
+      btn.textContent = "Copied!";
+      btn.style.color = color.accent;
+      setTimeout(() => { btn.textContent = "Share quote"; btn.style.color = color.muted; }, 2000);
+    }
+
+    async function load() {
+      const cached = sessionStorage.getItem(storageKey);
+      if (cached) {
+        currentQuote = JSON.parse(cached);
+        showQuote(currentQuote);
+        setTimeout(reveal, 100);
+        return;
+      }
+      try {
+        const res = await fetch("/.netlify/functions/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date: dateStr })
+        });
+        const data = await res.json();
+        currentQuote = data;
+        sessionStorage.setItem(storageKey, JSON.stringify(currentQuote));
+        showQuote(currentQuote);
+      } catch (e) {
+        showError("Couldn't load today's quote. Try refreshing in a moment.");
+      }
+      setTimeout(reveal, 100);
+    }
+
+    load();
+  </script>
+</body>
+</html>
